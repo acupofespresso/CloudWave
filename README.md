@@ -91,6 +91,10 @@
 
 ## 🏗️ 技术架构
 
+![技术架构流程图](tech_graph.png)
+
+整个系统采用数据驱动的渲染管线设计：
+
 ```
 📊 输入数据层
 ├── 🎤 音频输入 (micLevel, avgMag, cumulativeAudio)
@@ -110,6 +114,8 @@
 └── 🎵 音频可视化 (频谱分析, 流体效果)
 ```
 
+如上图所示，系统从多个输入源接收数据，通过复杂的状态机和动画系统处理，最终在WebGL渲染管线中生成实时的视觉效果。
+
 ## 📁 文件结构
 
 ```
@@ -117,12 +123,9 @@ cloud/
 ├── webgl.html              # 基础云雾动画
 ├── webgl_plus.html         # 增强云雾动画  
 ├── webgl_wave_openai.html  # OpenAI风格动效UI界面
-├── openai.js               # OpenAI核心实现 (178K+ 行)
+├── openai.js               # OpenAI核心实现的原始代码 (178K+ 行)
 ├── tech_graph.md           # 技术架构图表
 ├── noise-watercolor.webp   # 噪声纹理贴图
-├── dyx20gdpr72lkgi8.js     # WebGL基础库 (427K+ 行)
-├── ows5kkl4yp5s8tva.js     # 渲染引擎 (306K+ 行)
-├── khdhk3z8wzwgotvk.js     # 辅助工具库
 └── README.md               # 项目文档
 ```
 

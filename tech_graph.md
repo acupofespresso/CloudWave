@@ -1,3 +1,4 @@
+```mermaid
 graph TB
     %% 输入数据层
     subgraph "输入数据层"
@@ -103,3 +104,4 @@ graph TB
     style C3 fill:#4caf50
     style D3 fill:#ff9800
     style G2 fill:#9c27b0
+```
