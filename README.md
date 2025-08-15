@@ -20,7 +20,7 @@
 
 ### 📹 效果演示视频
 
-https://raw.githubusercontent.com/acupofespresso/CloudWave/main/demo.mov
+![演示视频](demo.mov)
 
 > 📺 观看完整的实时音频可视化效果演示，展示云雾动画、音频响应和多种状态切换的动态效果。
 
