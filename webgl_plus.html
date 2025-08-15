@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGL 蓝天云雾动画</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        canvas {
+            border: 1px solid #333;
+            border-radius: 50%;
+            width: 600px;
+            height: 600px;
+            transition: all 0.1s ease-out;
+        }
+        .info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-family: Arial, sans-serif;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="info">
+        <div>蓝天云雾动画效果</div>
+        <div>使用WebGL Shader实现</div>
+        <div id="audioStatus">音频状态: 初始化中...</div>
+        <div id="audioLevel">音频强度: 0.0</div>
+        <button id="testAudio" style="margin-top: 10px; padding: 5px 10px; background: #333; color: white; border: 1px solid #666; border-radius: 3px; cursor: pointer;">测试音频</button>
+    </div>
+    <canvas id="glCanvas"></canvas>
+
+    <script>
+        // 顶点着色器
+        const vertexShaderSource = `
+            attribute vec4 a_position;
+            void main() {
+                gl_Position = a_position;
+            }
+        `;
+
+        // 片段着色器 - 实现蓝天和云雾效果
+        const fragmentShaderSource = `
+            precision mediump float;
+            
+            uniform float u_time;
+            uniform vec2 u_resolution;
+            uniform float u_audioLevel;     // 音频强度
+            uniform float u_audioFrequency; // 音频频率
+            uniform float u_lowFreq;        // 低频强度
+            uniform float u_midFreq;        // 中频强度
+            uniform float u_highFreq;       // 高频强度
+            
+            // 改进的噪声函数
+            float hash(vec2 p) {
+                return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+            }
+            
+            float noise(vec2 p) {
+                vec2 i = floor(p);
+                vec2 f = fract(p);
+                f = f * f * (3.0 - 2.0 * f);
+                
+                float a = hash(i);
+                float b = hash(i + vec2(1.0, 0.0));
+                float c = hash(i + vec2(0.0, 1.0));
+                float d = hash(i + vec2(1.0, 1.0));
+                
+                return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+            }
+            
+            // 分形噪声
+            float fbm(vec2 p) {
+                float value = 0.0;
+                float amplitude = 0.5;
+                float frequency = 1.0;
+                
+                for(int i = 0; i < 6; i++) {
+                    value += amplitude * noise(p * frequency);
+                    amplitude *= 0.5;
+                    frequency *= 2.0;
+                }
+                
+                return value;
+            }
+            
+            // 增强的风场模拟函数 - 多频段驱动
+            vec2 windField(vec2 p, float time) {
+                // 大尺度环流 - 低频驱动
+                vec2 largScale = vec2(
+                    sin(p.y * 1.5 + time * 0.2 + u_lowFreq * 10.0) * (0.08 + u_lowFreq * 0.15),
+                    cos(p.x * 1.2 + time * 0.15 + u_lowFreq * 8.0) * (0.06 + u_lowFreq * 0.12)
+                );
+                
+                // 中尺度湍流 - 中频驱动
+                vec2 mediumScale = vec2(
+                    noise(p * 2.5 + time * 0.4 + u_midFreq * 5.0) - 0.5,
+                    noise(p * 2.5 + vec2(50.0) + time * 0.35 + u_midFreq * 4.0) - 0.5
+                ) * (0.1 + u_midFreq * 0.2);
+                
+                // 小尺度细节 - 高频驱动
+                vec2 smallScale = vec2(
+                    noise(p * 6.0 + time * 0.8 + u_highFreq * 15.0) - 0.5,
+                    noise(p * 6.0 + vec2(200.0) + time * 0.7 + u_highFreq * 12.0) - 0.5
+                ) * (0.05 + u_highFreq * 0.15);
+                
+                // 音频响应性涡流
+                vec2 audioVortex = vec2(
+                    sin(p.x * 4.0 + u_audioFrequency * 25.0) * u_audioLevel * 0.2,
+                    cos(p.y * 3.5 + u_audioFrequency * 20.0) * u_audioLevel * 0.18
+                );
+                
+                return largScale + mediumScale + smallScale + audioVortex;
+            }
+            
+            // 增强的流体变形函数 - 多频段驱动
+            vec2 fluidDistortion(vec2 p, float time) {
+                vec2 distortion = vec2(0.0);
+                
+                // 大波浪变形 - 低频驱动
+                distortion += vec2(
+                    sin(p.y * 1.0 + time * 0.5 + u_lowFreq * 6.0),
+                    cos(p.x * 0.8 + time * 0.4 + u_lowFreq * 5.0)
+                ) * (0.12 + u_lowFreq * 0.25);
+                
+                // 中等变形 - 中频驱动
+                distortion += vec2(
+                    sin(p.y * 2.5 + time * 0.8 + u_midFreq * 8.0),
+                    cos(p.x * 2.0 + time * 0.7 + u_midFreq * 7.0)
+                ) * (0.06 + u_midFreq * 0.15);
+                
+                // 细节变形 - 高频驱动
+                distortion += vec2(
+                    sin(p.y * 5.0 + time * 1.2 + u_highFreq * 12.0),
+                    cos(p.x * 4.5 + time * 1.0 + u_highFreq * 10.0)
+                ) * (0.03 + u_highFreq * 0.08);
+                
+                // 音频频率响应
+                distortion += vec2(
+                    sin(p.x * 3.0 + u_audioFrequency * 15.0),
+                    cos(p.y * 2.5 + u_audioFrequency * 12.0)
+                ) * u_audioLevel * 0.1;
+                
+                return distortion;
+            }
+            
+            // 改进的云朵函数 - 支持流体变形
+            float cloudBlob(vec2 p, vec2 center, float size, float softness, vec2 distortion) {
+                vec2 distortedP = p + distortion;
+                float dist = length(distortedP - center);
+                return smoothstep(size, size * softness, dist);
+            }
+            
+            // 云雾形状函数 - 重新设计为流体模拟
+            float cloudShape(vec2 p) {
+                float clouds = 0.0;
+                
+                // 计算风场影响
+                vec2 wind = windField(p, u_time);
+                
+                // 计算流体变形
+                vec2 fluidDeform = fluidDistortion(p, u_time);
+                
+                // 组合风场和流体变形
+                vec2 totalDeformation = wind + fluidDeform;
+                
+                // 应用变形到坐标系统
+                vec2 flowingP = p + totalDeformation;
+                
+                // 基础云雾纹理 - 使用变形后的坐标
+                float baseClouds = fbm(flowingP * 1.5);
+                
+                // 多层次的流动云雾
+                float layer1 = fbm((flowingP + wind * 0.5) * 2.0);
+                float layer2 = fbm((flowingP + wind * 0.8) * 3.5);
+                float layer3 = fbm((flowingP + wind * 1.2) * 6.0);
+                
+                // 音频驱动的云雾密度波动
+                float audioPulse = 1.0 + sin(u_time * 2.0 + u_audioFrequency * 8.0) * u_audioLevel * 0.3;
+                
+                // 主云团 - 使用流体变形而不是简单旋转
+                vec2 cloudCenter = vec2(
+                    sin(u_time * 0.2) * 0.05,
+                    cos(u_time * 0.15) * 0.03
+                );
+                
+                // 音频影响的云团变形
+                vec2 audioDeform = vec2(
+                    sin(u_audioFrequency * 5.0) * u_audioLevel * 0.2,
+                    cos(u_audioFrequency * 3.0) * u_audioLevel * 0.15
+                );
+                
+                float cloudSize = 0.7 + u_audioLevel * 0.4;
+                float mainCloud = cloudBlob(p, cloudCenter, cloudSize, 0.3, totalDeformation + audioDeform);
+                
+                // 创建涡流效果
+                vec2 vortexCenter = vec2(0.0, 0.0);
+                float vortexDist = length(p - vortexCenter);
+                float vortexAngle = atan(p.y - vortexCenter.y, p.x - vortexCenter.x);
+                float vortexStrength = (1.0 - smoothstep(0.2, 1.0, vortexDist)) * u_audioLevel * 0.5;
+                
+                vec2 vortexP = vec2(
+                    cos(vortexAngle + vortexStrength * 3.0 + u_time * 0.5),
+                    sin(vortexAngle + vortexStrength * 3.0 + u_time * 0.5)
+                ) * vortexDist + vortexCenter;
+                
+                float vortexClouds = fbm(vortexP * 4.0) * vortexStrength;
+                
+                // 边缘湍流效果
+                float edgeTurbulence = fbm(p * 8.0 + totalDeformation * 2.0) * 
+                                      smoothstep(0.6, 1.0, length(p)) * u_audioLevel;
+                
+                // 组合所有层次
+                clouds = baseClouds * 0.4 + 
+                         layer1 * 0.3 + 
+                         layer2 * 0.2 + 
+                         layer3 * 0.1 +
+                         mainCloud * 0.8 + 
+                         vortexClouds * 0.6 +
+                         edgeTurbulence * 0.3;
+                
+                // 应用音频脉冲效果
+                clouds *= audioPulse;
+                
+                // 平滑过渡
+                clouds = smoothstep(0.25, 0.75, clouds);
+                
+                // 边缘柔化
+                float edgeFade = 1.0 - smoothstep(0.7, 1.0, length(p));
+                clouds *= edgeFade;
+                
+                return clouds;
+            }
+            
+            void main() {
+                vec2 uv = gl_FragCoord.xy / u_resolution.xy;
+                vec2 p = (uv - 0.5) * 2.0;
+                
+                // 创建圆形裁剪
+                float dist = length(p);
+                if (dist > 1.0) {
+                    discard; // 裁剪掉圆形外的像素
+                }
+                
+                // 居中的蓝天渐变（去掉垂直渐变）
+                vec3 skyColor = mix(
+                    vec3(0.2, 0.4, 0.9),  // 深蓝色
+                    vec3(0.5, 0.7, 1.0),  // 中蓝色
+                    0.5  // 固定为中间值，去掉垂直渐变
+                );
+                
+                // 添加天空的微妙变化 - 去掉时间偏移，避免流动
+                float skyVariation = noise(p * 0.8);
+                skyColor += skyVariation * 0.05;
+                
+                // 云雾效果
+                float clouds = cloudShape(p);
+                
+                // 云雾颜色 - 更亮的白色
+                vec3 cloudColor = mix(
+                    vec3(1.0, 1.0, 1.0),      // 纯白色
+                    vec3(0.9, 0.95, 1.0),     // 极淡的蓝色
+                    clouds
+                );
+                
+                // 增强云雾的对比度
+                float cloudIntensity = smoothstep(0.2, 0.8, clouds);
+                cloudColor = mix(cloudColor, vec3(1.0), cloudIntensity * 0.3);
+                
+                // 混合天空和云雾 - 增强云雾的可见性
+                vec3 finalColor = mix(skyColor, cloudColor, cloudIntensity * 0.9);
+                
+                // 添加一些高光效果 - 去掉时间偏移，避免流动
+                float highlights = fbm(p * 15.0);
+                if (highlights > 0.85) {
+                    finalColor = mix(finalColor, vec3(1.0), 0.2);
+                }
+                
+                // 增强整体对比度
+                finalColor = pow(finalColor, vec3(0.9));
+                
+                gl_FragColor = vec4(finalColor, 1.0);
+            }
+        `;
+
+        // WebGL 初始化
+        function initWebGL() {
+            const canvas = document.getElementById('glCanvas');
+            const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+            
+            if (!gl) {
+                alert('无法初始化WebGL');
+                return null;
+            }
+            
+            // 设置画布尺寸 - 保持正方形以支持圆形
+            function resizeCanvas() {
+                const size = Math.min(600, Math.min(window.innerWidth, window.innerHeight) - 40);
+                
+                if (canvas.width !== size || canvas.height !== size) {
+                    canvas.width = size;
+                    canvas.height = size;
+                    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+                }
+            }
+            
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            return gl;
+        }
+
+        // 创建着色器程序
+        function createShaderProgram(gl, vertexSource, fragmentSource) {
+            const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSource);
+            const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
+            
+            const program = gl.createProgram();
+            gl.attachShader(program, vertexShader);
+            gl.attachShader(program, fragmentShader);
+            gl.linkProgram(program);
+            
+            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                console.error('着色器程序链接失败:', gl.getProgramInfoLog(program));
+                return null;
+            }
+            
+            return program;
+        }
+
+        // 创建着色器
+        function createShader(gl, type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error('着色器编译失败:', gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            
+            return shader;
+        }
+
+        // 创建缓冲区
+        function createBuffer(gl, data) {
+            const buffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+            return buffer;
+        }
+
+        // 音频处理 - 增强多频段分析
+        let audioContext, analyser, microphone, audioData = { 
+            level: 0.0, 
+            frequency: 0.0,
+            lowFreq: 0.0,      // 低频 (0-250Hz) - 影响大尺度流动
+            midFreq: 0.0,      // 中频 (250-2000Hz) - 影响中等湍流
+            highFreq: 0.0      // 高频 (2000Hz+) - 影响细节纹理
+        };
+        let isAudioAnalyzing = false;
+        
+        // 音频分析循环 - 增强多频段分析
+        function analyzeAudio() {
+            if (!isAudioAnalyzing) return;
+            
+            try {
+                const dataArray = new Uint8Array(analyser.frequencyBinCount);
+                analyser.getByteFrequencyData(dataArray);
+                
+                // 计算总体音频强度
+                let sum = 0;
+                for (let i = 0; i < dataArray.length; i++) {
+                    sum += dataArray[i];
+                }
+                audioData.level = (sum / dataArray.length) / 255.0; // 归一化到0-1
+                
+                // 分频段分析
+                const binCount = dataArray.length;
+                const sampleRate = audioContext.sampleRate;
+                const nyquist = sampleRate / 2;
+                
+                // 计算频段范围
+                const lowEnd = Math.floor((250 / nyquist) * binCount);
+                const midEnd = Math.floor((2000 / nyquist) * binCount);
+                
+                // 低频分析 (0-250Hz) - 用于大尺度流动
+                let lowSum = 0;
+                for (let i = 0; i < lowEnd; i++) {
+                    lowSum += dataArray[i];
+                }
+                audioData.lowFreq = lowEnd > 0 ? (lowSum / lowEnd) / 255.0 : 0.0;
+                
+                // 中频分析 (250-2000Hz) - 用于中等湍流
+                let midSum = 0;
+                const midBins = midEnd - lowEnd;
+                for (let i = lowEnd; i < midEnd; i++) {
+                    midSum += dataArray[i];
+                }
+                audioData.midFreq = midBins > 0 ? (midSum / midBins) / 255.0 : 0.0;
+                
+                // 高频分析 (2000Hz+) - 用于细节纹理
+                let highSum = 0;
+                const highBins = binCount - midEnd;
+                for (let i = midEnd; i < binCount; i++) {
+                    highSum += dataArray[i];
+                }
+                audioData.highFreq = highBins > 0 ? (highSum / highBins) / 255.0 : 0.0;
+                
+                // 计算主要频率
+                let maxIndex = 0;
+                let maxValue = 0;
+                for (let i = 0; i < dataArray.length; i++) {
+                    if (dataArray[i] > maxValue) {
+                        maxValue = dataArray[i];
+                        maxIndex = i;
+                    }
+                }
+                audioData.frequency = (maxIndex / dataArray.length) * 2.0; // 归一化到0-2
+                
+                // 更新显示
+                document.getElementById('audioLevel').textContent = 
+                    `音频强度: ${audioData.level.toFixed(2)} | 低:${audioData.lowFreq.toFixed(2)} 中:${audioData.midFreq.toFixed(2)} 高:${audioData.highFreq.toFixed(2)}`;
+                
+                // 应用画布呼吸效果
+                applyCanvasBreathing();
+                
+            } catch (error) {
+                console.error('音频分析错误:', error);
+            }
+            
+            requestAnimationFrame(analyzeAudio);
+        }
+        
+        // 初始化音频
+        async function initAudio() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                analyser.smoothingTimeConstant = 0.8;
+                
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false
+                    } 
+                });
+                
+                microphone = audioContext.createMediaStreamSource(stream);
+                microphone.connect(analyser);
+                
+                // 启动音频分析
+                isAudioAnalyzing = true;
+                analyzeAudio();
+                
+                console.log('音频初始化成功');
+                document.getElementById('audioStatus').textContent = '音频状态: 已连接';
+                
+            } catch (error) {
+                console.error('音频初始化失败:', error);
+                // 如果无法获取麦克风权限，使用模拟数据
+                audioData = { level: 0.1, frequency: 0.5 };
+                document.getElementById('audioStatus').textContent = '音频状态: 模拟模式';
+                
+                // 启动模拟音频分析
+                isAudioAnalyzing = true;
+                simulateAudio();
+            }
+        }
+        
+        // 模拟音频数据（当无法获取麦克风时）
+        function simulateAudio() {
+            if (!isAudioAnalyzing) return;
+            
+            const time = Date.now() * 0.001;
+            
+            // 模拟音频变化 - 增强多频段模拟
+            audioData.level = 0.1 + Math.sin(time) * 0.05;
+            audioData.frequency = 0.5 + Math.sin(time * 0.7) * 0.3;
+            
+            // 模拟不同频段的变化
+            audioData.lowFreq = 0.05 + Math.sin(time * 0.3) * 0.04;      // 慢变化的低频
+            audioData.midFreq = 0.08 + Math.sin(time * 1.2) * 0.06;      // 中等变化的中频
+            audioData.highFreq = 0.03 + Math.sin(time * 2.5) * 0.03;     // 快变化的高频
+            
+            document.getElementById('audioLevel').textContent = 
+                `音频强度: ${audioData.level.toFixed(2)} | 低:${audioData.lowFreq.toFixed(2)} 中:${audioData.midFreq.toFixed(2)} 高:${audioData.highFreq.toFixed(2)}`;
+            
+            // 应用画布呼吸效果
+            applyCanvasBreathing();
+            
+            requestAnimationFrame(simulateAudio);
+        }
+        
+        // 画布呼吸效果函数
+        function applyCanvasBreathing() {
+            const canvas = document.getElementById('glCanvas');
+            if (!canvas) return;
+            
+            // 基础尺寸
+            const baseSize = 600;
+            
+            // 根据音频强度计算呼吸效果
+            // 音频强度越高，画布越大
+            const breathingScale = 1.0 + audioData.level * 0.4; // 最大放大到1.4倍
+            const newSize = baseSize * breathingScale;
+            
+            // 应用尺寸变化
+            canvas.style.width = newSize + 'px';
+            canvas.style.height = newSize + 'px';
+            
+            // 添加呼吸时的颜色变化
+            const intensity = audioData.level;
+            const borderColor = `rgb(${51 + intensity * 150}, ${51 + intensity * 150}, ${51 + intensity * 150})`;
+            canvas.style.borderColor = borderColor;
+            
+            // 添加呼吸时的阴影效果
+            const shadowIntensity = Math.floor(intensity * 60);
+            const glowColor = `rgba(0, 255, 255, ${intensity * 0.6})`;
+            canvas.style.boxShadow = `0 0 ${25 + shadowIntensity}px ${glowColor}`;
+            
+            // 添加呼吸时的背景光晕
+            if (intensity > 0.1) {
+                canvas.style.background = `radial-gradient(circle, rgba(0, 255, 255, ${intensity * 0.1}) 0%, transparent 70%)`;
+            } else {
+                canvas.style.background = 'transparent';
+            }
+        }
+        
+        // 主函数
+        function main() {
+            const gl = initWebGL();
+            if (!gl) return;
+            
+            // 创建着色器程序
+            const program = createShaderProgram(gl, vertexShaderSource, fragmentShaderSource);
+            if (!program) return;
+            
+            // 创建顶点数据 (全屏四边形)
+            const positions = [
+                -1, -1,
+                 1, -1,
+                -1,  1,
+                 1,  1
+            ];
+            
+            const positionBuffer = createBuffer(gl, positions);
+            
+            // 获取属性位置
+            const positionLocation = gl.getAttribLocation(program, 'a_position');
+            
+            // 获取uniform位置
+            const timeLocation = gl.getUniformLocation(program, 'u_time');
+            const resolutionLocation = gl.getUniformLocation(program, 'u_resolution');
+            const audioLevelLocation = gl.getUniformLocation(program, 'u_audioLevel');
+            const audioFrequencyLocation = gl.getUniformLocation(program, 'u_audioFrequency');
+            const lowFreqLocation = gl.getUniformLocation(program, 'u_lowFreq');
+            const midFreqLocation = gl.getUniformLocation(program, 'u_midFreq');
+            const highFreqLocation = gl.getUniformLocation(program, 'u_highFreq');
+            
+            // 渲染循环
+            function render(time) {
+                time *= 0.001; // 转换为秒
+                
+                gl.useProgram(program);
+                
+                // 设置uniforms
+                gl.uniform1f(timeLocation, time);
+                gl.uniform2f(resolutionLocation, gl.canvas.width, gl.canvas.height);
+                gl.uniform1f(audioLevelLocation, audioData.level || 0.0);
+                gl.uniform1f(audioFrequencyLocation, audioData.frequency || 0.0);
+                gl.uniform1f(lowFreqLocation, audioData.lowFreq || 0.0);
+                gl.uniform1f(midFreqLocation, audioData.midFreq || 0.0);
+                gl.uniform1f(highFreqLocation, audioData.highFreq || 0.0);
+                
+                // 设置顶点属性
+                gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+                gl.enableVertexAttribArray(positionLocation);
+                gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+                
+                // 清除画布
+                gl.clearColor(0, 0, 0, 1);
+                gl.clear(gl.COLOR_BUFFER_BIT);
+                
+                // 绘制
+                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                
+                requestAnimationFrame(render);
+            }
+            
+            // 启动渲染循环
+            requestAnimationFrame(render);
+        }
+        
+        // 启动应用
+        main();
+        
+        // 初始化音频
+        initAudio();
+        
+        // 初始化画布呼吸效果
+        setTimeout(() => {
+            applyCanvasBreathing();
+        }, 100);
+        
+        // 添加测试音频按钮事件
+        document.getElementById('testAudio').addEventListener('click', function() {
+            if (audioContext && audioContext.state === 'suspended') {
+                audioContext.resume();
+                console.log('音频上下文已恢复');
+            }
+            
+            // 强制更新音频状态显示
+            if (isAudioAnalyzing) {
+                document.getElementById('audioLevel').textContent = `音频强度: ${audioData.level.toFixed(2)}`;
+                console.log('当前音频数据:', audioData);
+            } else {
+                console.log('音频分析未启动');
+            }
+        });
+    </script>
+</body>
+</html>

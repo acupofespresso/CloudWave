@@ -1,0 +1,1959 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGL OpenAI 动态特效</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #0a1428 0%, #1a2332 50%, #0d1b2a 100%);
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+        }
+        
+        #glCanvas {
+            border-radius: 50%;
+            width: 300px;
+            height: 300px;
+            background: transparent;
+        }
+        
+        .controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            background: rgba(0, 51, 102, 0.85);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 20px;
+            border-radius: 15px;
+            font-size: 14px;
+            max-width: 300px;
+            box-shadow: 0 8px 32px rgba(0, 51, 102, 0.3);
+        }
+        
+        .controls h3 {
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            color: #FFFFFF;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #aaa;
+            font-size: 12px;
+        }
+        
+        button {
+            padding: 8px 16px;
+            margin: 5px;
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            background: #444;
+            border-color: #67B7FF;
+        }
+        
+        button.active {
+            background: #67B7FF;
+            border-color: #67B7FF;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            margin: 5px 0;
+        }
+        
+        .value-display {
+            display: inline-block;
+            width: 50px;
+            text-align: right;
+            color: #FFFFFF;
+            font-weight: bold;
+        }
+        
+        .state-info {
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            font-size: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+        
+        .checkbox-group input {
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <h3>OpenAI 特效控制面板</h3>
+        
+        <div class="control-group">
+            <label>状态切换</label>
+            <button id="idleBtn" class="active">Idle</button>
+            <button id="listenBtn">Listen</button>
+            <button id="thinkBtn">Think</button>
+            <button id="speakBtn">Speak</button>
+            <button id="haltBtn">Halt</button>
+        </div>
+        
+        <div class="control-group">
+            <label>麦克风音量 <span class="value-display" id="micValue">0.00</span></label>
+            <input type="range" id="micLevel" min="0" max="1" step="0.01" value="0">
+        </div>
+        
+        <div class="control-group">
+            <label>音频强度</label>
+            <div style="display: flex; gap: 10px;">
+                <input type="range" id="audioLow" min="0" max="1" step="0.01" value="0.2" style="width: 60px;">
+                <input type="range" id="audioMid" min="0" max="1" step="0.01" value="0.3" style="width: 60px;">
+                <input type="range" id="audioHigh" min="0" max="1" step="0.01" value="0.4" style="width: 60px;">
+                <input type="range" id="audioFull" min="0" max="1" step="0.01" value="0.5" style="width: 60px;">
+            </div>
+            <div style="display: flex; gap: 10px; font-size: 10px; color: #666;">
+                <span style="width: 60px; text-align: center;">低频</span>
+                <span style="width: 60px; text-align: center;">中频</span>
+                <span style="width: 60px; text-align: center;">高频</span>
+                <span style="width: 60px; text-align: center;">全频</span>
+            </div>
+        </div>
+        
+
+        <div class="control-group">
+            <div class="checkbox-group">
+                <input type="checkbox" id="darkMode" checked>
+                <label for="darkMode">深色模式</label>
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="newBloop" checked>
+                <label for="newBloop">新版动画</label>
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="advancedBloop" checked>
+                <label for="advancedBloop">高级特效</label>
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="fadeBloop">
+                <label for="fadeBloop">监听时淡出</label>
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="breathingEffect" checked>
+                <label for="breathingEffect">呼吸效果</label>
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="cloudFluctuation" checked>
+                <label for="cloudFluctuation">云雾扰动</label>
+            </div>
+        </div>
+        
+        <div class="state-info">
+            <div>当前状态: <span id="currentState">Idle</span></div>
+            <div>运行时间: <span id="runTime">0.00</span>s</div>
+        </div>
+    </div>
+    
+    <canvas id="glCanvas"></canvas>
+
+    <script>
+        // 从提供的代码中提取的片段着色器
+        const fragmentShaderSource = `#version 300 es
+#define E (2.71828182846)
+#define pi (3.14159265358979323844)
+#define NUM_OCTAVES (4)
+
+precision highp float;
+
+struct ColoredSDF {
+  float distance;
+  vec4 color;
+};
+
+struct SDFArgs {
+  vec2 st;
+  float amount;
+  float duration;
+  float time;
+  float mainRadius;
+};
+
+float triangle(float t, float p) {
+  return 2.0 * abs(t / p - floor(t / p + 0.5));
+}
+
+float spring(float t, float d) {
+  return 1.0 - exp(-E * 2.0 * t) * cos((1.0 - d) * 115.0 * t);
+}
+
+float silkySmooth(float t, float k) {
+  return atan(k * sin((t - 0.5) * pi)) / atan(k) * 0.5 + 0.5;
+}
+
+float scaled(float edge0, float edge1, float x) {
+  return clamp((x - edge0) / (edge1 - edge0), float(0), float(1));
+}
+
+float fixedSpring(float t, float d) {
+  float s = mix(
+    1.0 - exp(-E * 2.0 * t) * cos((1.0 - d) * 115.0 * t),
+    1.0,
+    scaled(0.0, 1.0, t)
+  );
+  return s * (1.0 - t) + t;
+}
+
+float bounce(float t, float d) {
+  return -sin(pi * (1.0 - d) * t) *
+  (1.0 - t) *
+  exp(-2.71828182846 * 2.0 * t) *
+  t *
+  10.0;
+}
+
+float random(vec2 st) {
+  return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+}
+
+float random(ivec2 st) {
+  return random(vec2(st));
+}
+
+float random(float p) {
+  return random(vec2(p));
+}
+
+float opSmoothUnion(float d1, float d2, float k) {
+  if (k <= 0.0) {
+    k = 0.000001;
+  }
+  float h = clamp(0.5 + 0.5 * (d2 - d1) / k, 0.0, 1.0);
+  return mix(d2, d1, h) - k * h * (1.0 - h);
+}
+
+float opSmoothSubtraction(float d1, float d2, float k) {
+  if (k <= 0.0) {
+    k = 0.000001;
+  }
+  float h = clamp(0.5 - 0.5 * (d2 + d1) / k, 0.0, 1.0);
+  return mix(d2, -d1, h) + k * h * (1.0 - h);
+}
+
+float opSmoothIntersection(float d1, float d2, float k) {
+  if (k <= 0.0) {
+    k = 0.000001;
+  }
+  float h = clamp(0.5 - 0.5 * (d2 - d1) / k, 0.0, 1.0);
+  return mix(d2, d1, h) + k * h * (1.0 - h);
+}
+
+float sdRoundedBox(vec2 p, vec2 b, vec4 r) {
+  r.xy = p.x > 0.0 ? r.xy : r.zw;
+  r.x = p.y > 0.0 ? r.x : r.y;
+  vec2 q = abs(p) - b + r.x;
+  return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r.x;
+}
+
+float sdSegment(vec2 p, vec2 a, vec2 b) {
+  vec2 pa = p - a;
+  vec2 ba = b - a;
+  float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+  return length(pa - ba * h);
+}
+
+float sdArc(vec2 p, vec2 sca, vec2 scb, float ra, float rb) {
+  p *= mat2(sca.x, sca.y, -sca.y, sca.x);
+  p.x = abs(p.x);
+  return scb.y * p.x > scb.x * p.y
+    ? length(p - ra * scb) - rb
+    : abs(length(p) - ra) - rb;
+}
+
+float arc(vec2 st, float startAngle, float length, float radius, float width) {
+  return sdArc(
+    st,
+    vec2(sin(startAngle), cos(startAngle)),
+    vec2(sin(length), cos(length)),
+    radius,
+    width
+  );
+}
+
+vec2 rotate(vec2 v, float a) {
+  float s = sin(a);
+  float c = cos(a);
+  mat2 m = mat2(c, s, -s, c);
+  return m * v;
+}
+
+// 专业级LinearBurn混合模式 - 模拟真实光线混合
+vec3 blendLinearBurn_13_5(vec3 base, vec3 blend) {
+  return max(base + blend - vec3(1.0), vec3(0.0));
+}
+
+vec3 blendLinearBurn_13_5(vec3 base, vec3 blend, float opacity) {
+  return blendLinearBurn_13_5(base, blend) * opacity + base * (1.0 - opacity);
+}
+
+// 改进的专业混合函数 - 用于替代简单的加性混合
+vec3 blendSoftLight(vec3 base, vec3 blend) {
+  vec3 result;
+  for(int i = 0; i < 3; i++) {
+    if(blend[i] < 0.5) {
+      result[i] = 2.0 * base[i] * blend[i] + base[i] * base[i] * (1.0 - 2.0 * blend[i]);
+    } else {
+      result[i] = 2.0 * base[i] * (1.0 - blend[i]) + sqrt(base[i]) * (2.0 * blend[i] - 1.0);
+    }
+  }
+  return result;
+}
+
+vec4 permute(vec4 x) {
+  return mod((x * 34.0 + 1.0) * x, 289.0);
+}
+vec4 taylorInvSqrt(vec4 r) {
+  return 1.79284291400159 - 0.85373472095314 * r;
+}
+vec3 fade(vec3 t) {
+  return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+}
+
+float cnoise(vec3 P) {
+  vec3 Pi0 = floor(P);
+  vec3 Pi1 = Pi0 + vec3(1.0);
+  Pi0 = mod(Pi0, 289.0);
+  Pi1 = mod(Pi1, 289.0);
+  vec3 Pf0 = fract(P);
+  vec3 Pf1 = Pf0 - vec3(1.0);
+  vec4 ix = vec4(Pi0.x, Pi1.x, Pi0.x, Pi1.x);
+  vec4 iy = vec4(Pi0.yy, Pi1.yy);
+  vec4 iz0 = vec4(Pi0.z);
+  vec4 iz1 = vec4(Pi1.z);
+
+  vec4 ixy = permute(permute(ix) + iy);
+  vec4 ixy0 = permute(ixy + iz0);
+  vec4 ixy1 = permute(ixy + iz1);
+
+  vec4 gx0 = ixy0 / 7.0;
+  vec4 gy0 = fract(floor(gx0) / 7.0) - 0.5;
+  gx0 = fract(gx0);
+  vec4 gz0 = vec4(0.5) - abs(gx0) - abs(gy0);
+  vec4 sz0 = step(gz0, vec4(0.0));
+  gx0 -= sz0 * (step(vec4(0.0), gx0) - 0.5);
+  gy0 -= sz0 * (step(vec4(0.0), gy0) - 0.5);
+
+  vec4 gx1 = ixy1 / 7.0;
+  vec4 gy1 = fract(floor(gx1) / 7.0) - 0.5;
+  gx1 = fract(gx1);
+  vec4 gz1 = vec4(0.5) - abs(gx1) - abs(gy1);
+  vec4 sz1 = step(gz1, vec4(0.0));
+  gx1 -= sz1 * (step(vec4(0.0), gx1) - 0.5);
+  gy1 -= sz1 * (step(vec4(0.0), gy1) - 0.5);
+
+  vec3 g000 = vec3(gx0.x, gy0.x, gz0.x);
+  vec3 g100 = vec3(gx0.y, gy0.y, gz0.y);
+  vec3 g010 = vec3(gx0.z, gy0.z, gz0.z);
+  vec3 g110 = vec3(gx0.w, gy0.w, gz0.w);
+  vec3 g001 = vec3(gx1.x, gy1.x, gz1.x);
+  vec3 g101 = vec3(gx1.y, gy1.y, gz1.y);
+  vec3 g011 = vec3(gx1.z, gy1.z, gz1.z);
+  vec3 g111 = vec3(gx1.w, gy1.w, gz1.w);
+
+  vec4 norm0 = taylorInvSqrt(
+    vec4(dot(g000, g000), dot(g010, g010), dot(g100, g100), dot(g110, g110))
+  );
+  g000 *= norm0.x;
+  g010 *= norm0.y;
+  g100 *= norm0.z;
+  g110 *= norm0.w;
+  vec4 norm1 = taylorInvSqrt(
+    vec4(dot(g001, g001), dot(g011, g011), dot(g101, g101), dot(g111, g111))
+  );
+  g001 *= norm1.x;
+  g011 *= norm1.y;
+  g101 *= norm1.z;
+  g111 *= norm1.w;
+
+  float n000 = dot(g000, Pf0);
+  float n100 = dot(g100, vec3(Pf1.x, Pf0.yz));
+  float n010 = dot(g010, vec3(Pf0.x, Pf1.y, Pf0.z));
+  float n110 = dot(g110, vec3(Pf1.xy, Pf0.z));
+  float n001 = dot(g001, vec3(Pf0.xy, Pf1.z));
+  float n101 = dot(g101, vec3(Pf1.x, Pf0.y, Pf1.z));
+  float n011 = dot(g011, vec3(Pf0.x, Pf1.yz));
+  float n111 = dot(g111, Pf1);
+
+  vec3 fade_xyz = fade(Pf0);
+  vec4 n_z = mix(
+    vec4(n000, n100, n010, n110),
+    vec4(n001, n101, n011, n111),
+    fade_xyz.z
+  );
+  vec2 n_yz = mix(n_z.xy, n_z.zw, fade_xyz.y);
+  float n_xyz = mix(n_yz.x, n_yz.y, fade_xyz.x);
+  return 2.2 * n_xyz;
+}
+
+float rand(vec2 n) {
+  return fract(sin(dot(n, vec2(12.9898, 4.1414))) * 43758.5453);
+}
+
+float noise(vec2 p) {
+  vec2 ip = floor(p);
+  vec2 u = fract(p);
+  u = u * u * (3.0 - 2.0 * u);
+
+  float res = mix(
+    mix(rand(ip), rand(ip + vec2(1.0, 0.0)), u.x),
+    mix(rand(ip + vec2(0.0, 1.0)), rand(ip + vec2(1.0, 1.0)), u.x),
+    u.y
+  );
+  return res * res;
+}
+
+float fbm(vec2 x) {
+  float v = 0.0;
+  float a = 0.5;
+  vec2 shift = vec2(100.0);
+  
+  mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
+  for (int i = 0; i < NUM_OCTAVES; ++i) {
+    v += a * noise(x);
+    x = rot * x * 2.0 + shift;
+    a *= 0.5;
+  }
+  return v;
+}
+
+/**
+ * End new code for colored orb
+ */
+
+ColoredSDF applyIdleState(
+  ColoredSDF sdf,
+  SDFArgs args,
+  bool isDarkMode /**
+ * new bool
+ */
+, vec3 bloopColorMain) {
+  float midRadius = 0.12; 
+  float maxRadius = 0.3; 
+  float t1 = 1.0; 
+  float gamma = 3.0; 
+  float omega = pi / 2.0; 
+
+  
+  float k = exp(-gamma) * omega;
+
+  float radius;
+  if (args.time <= t1) {
+    
+    float t_prime = args.time / t1;
+    
+    float springValue = 1.0 - exp(-gamma * t_prime) * cos(omega * t_prime);
+    radius = midRadius * springValue;
+  } else {
+    
+    float adjustedTime = args.time - t1;
+    
+    radius =
+      midRadius + (maxRadius - midRadius) * (1.0 - exp(-k * adjustedTime));
+  }
+
+  
+  float distance = length(args.st) - radius;
+
+  
+  sdf.distance = mix(sdf.distance, distance, args.amount);
+
+  
+  // 优化idle状态的呼吸节奏，与其他动画更协调
+  float alpha = sin(pi * 0.8 * args.time) * 0.3 + 0.7;
+  // 使用天蓝色背景
+  vec3 idleColor = bloopColorMain;
+  vec4 color = vec4(idleColor, alpha);
+
+  
+  sdf.color = mix(sdf.color, color, args.amount);
+
+  return sdf;
+}
+
+ColoredSDF applyIdleStateLegacy(ColoredSDF sdf, SDFArgs args, bool isDarkMode, vec3 bloopColorMain) {
+  float connectedLinearAnimation = scaled(0.0, 2.0, args.duration);
+  float connectedAnimation = fixedSpring(connectedLinearAnimation, 0.96);
+  float circleSize =
+    mix(
+      pow(scaled(0.0, 3.0, args.time), 2.0) * 0.75 + 0.1,
+      1.0,
+      connectedAnimation
+    ) *
+    0.33;
+  vec2 rotatedCoords = rotate(
+    args.st,
+    -args.time * pi -
+      connectedAnimation * pi * 2.0 -
+      pi * 2.0 * 5.0 * silkySmooth(scaled(0.0, 5.0, args.time), 2.0)
+  );
+
+  float strokeWidth = mix(circleSize / 2.0, circleSize, connectedAnimation);
+  float connecting = abs(length(args.st) - circleSize) - strokeWidth;
+
+  float connected = length(args.st) - circleSize;
+  float idleDist = mix(connecting, connected, connectedAnimation);
+
+  float d = min(sdf.distance, idleDist);
+  sdf.distance = mix(sdf.distance, d, args.amount);
+  float angle = atan(rotatedCoords.y, rotatedCoords.x);
+  float alpha = mix(
+    min(1.0, scaled(-pi, pi, angle)),
+    1.0,
+    connectedLinearAnimation
+  );
+
+  float spinningCircleDist =
+    length(
+      rotatedCoords -
+        vec2(-mix(circleSize, strokeWidth, connectedAnimation), 0.0)
+    ) -
+    strokeWidth;
+
+  alpha = min(
+    1.0,
+    max(
+      alpha,
+      smoothstep(0.005, 0.0, spinningCircleDist) + connectedAnimation * 4.0
+    )
+  );
+
+  // 使用天蓝色背景
+  vec3 legacyIdleColor = bloopColorMain;
+  sdf.color = mix(
+    sdf.color,
+    vec4(legacyIdleColor, alpha),
+    args.amount
+  );
+  return sdf;
+}
+
+ColoredSDF applyListenState(
+  ColoredSDF sdf,
+  SDFArgs args,
+  float micLevel,
+  float listenTimestamp, /* new */
+  float touchDownTimestamp, /* new */
+  float touchUpTimestamp, /* new */
+  bool fadeBloopWhileListening /* new */
+) {
+  float breathingSequence = sin(args.time) * 0.5 + 0.5;
+  float entryAnimation = fixedSpring(scaled(0.0, 3.0, args.duration), 0.9);
+
+  float touch =
+    fixedSpring(scaled(0.0, 1.0, args.time - touchDownTimestamp), 0.99) -
+    fixedSpring(scaled(0.0, 0.8, args.time - touchUpTimestamp), 1.0);
+
+  float listenAnimation = clamp(
+    spring(scaled(0.0, 0.9, args.duration), 1.0),
+    0.0,
+    1.0
+  );
+  float radius = 0.0;
+  float smoothlevel = micLevel;
+  float l1 = smoothlevel;
+  radius = 0.38 + l1 * 0.05 + breathingSequence * 0.03;
+  radius *= 1.0 - (1.0 - entryAnimation) * 0.25;
+
+  float ring = 10000.0;
+
+  
+  if (touch > 0.0) {
+    touch = min(touch, listenAnimation); 
+    float arcWidth = radius * 0.1;
+
+    
+    radius -= touch * arcWidth * 2.3;
+    
+    radius = min(
+      radius,
+      mix(radius, args.mainRadius - arcWidth * 2.3 - l1 * 0.01, touch)
+    );
+
+    float startAngle = 0.0;
+    float arcLengthTouch =
+      smoothstep(0.04, 1.0, touch) * pi * (1.0 - arcWidth / 3.0 / radius);
+
+    float arcLength = 0.0;
+    float radiusTouch =
+      radius * fixedSpring(scaled(0.0, 1.0, args.duration), 1.0) * args.amount +
+      l1 * 0.01;
+
+    radiusTouch +=
+      arcWidth * 1.3 * mix(-1.0, 1.0, smoothstep(0.0, 0.12, touch));
+
+    float ringRadius = 0.0;
+    arcLength = arcLengthTouch;
+    ringRadius = radiusTouch;
+    startAngle = pi / 2.0 - (args.time - touchDownTimestamp) / 2.0;
+
+    ring = arc(args.st, startAngle, arcLength, ringRadius, arcWidth); 
+  }
+
+  float d = length(args.st) - radius;
+
+  d = min(d, ring);
+
+  sdf.distance = mix(sdf.distance, d, args.amount);
+
+  // 使用纯白色云雾配色方案
+  //vec3 listenColor = vec3(1.0, 1.0, 1.0); // 纯白色云雾
+  //sdf.color.rgb = mix(sdf.color.rgb, listenColor, args.amount);
+  
+  if (fadeBloopWhileListening) {
+    
+    sdf.color.a = mix(
+      sdf.color.a,
+      mix(1.0, 1.0 - l1 * 0.6, listenAnimation),
+      args.amount
+    );
+  } else {
+    sdf.color.a = 1.0;
+  }
+
+  return sdf;
+}
+
+ColoredSDF applyThinkState(ColoredSDF sdf, SDFArgs args, vec3 bloopColorMain) {
+  float d = 1000.0; 
+  int count = 5; 
+  float entryAnimation = spring(scaled(0.0, 1.0, args.duration), 1.0);
+
+  float thinkingDotEntryAnimation = spring(
+    scaled(0.1, 1.1, args.duration),
+    1.0
+  );
+  float thinkingDotRadius =
+    mix(0.2, 0.06, thinkingDotEntryAnimation) * args.amount;
+
+  
+  args.st.x -= thinkingDotRadius * 0.5 * thinkingDotEntryAnimation;
+
+  for (int i = 0; i < count; i++) {
+    float f = float(float(i) + 0.5) / float(count); 
+    float a =
+      -f * pi * 2.0 +
+      args.time / 3.0 +
+      spring(scaled(0.0, 10.0, args.duration), 1.0) * pi / 2.0;
+    float ringRadi = args.mainRadius * 0.45 * entryAnimation;
+
+    
+    ringRadi -=
+      (sin(
+        entryAnimation * pi * 4.0 +
+          a * pi * 2.0 +
+          args.time * 2.0 -
+          silkySmooth(args.time / 6.0, 2.0) * pi * 1.0
+      ) *
+        0.5 +
+        0.5) *
+      args.mainRadius *
+      0.1;
+
+    vec2 pos = vec2(cos(a), sin(a)) * ringRadi;
+    float dd = length(args.st - pos) - args.mainRadius * 0.5;
+
+    
+    d = opSmoothUnion(
+      d,
+      dd,
+      0.03 * scaled(0.0, 10.0, args.duration) + 0.8 * (1.0 - entryAnimation)
+    );
+
+    
+    float dotAngle = f * pi * 2.0;
+    float dotRingRadius =
+      (sin(
+        thinkingDotEntryAnimation * pi * 4.0 +
+          a * pi * 2.0 +
+          args.time * 0.5
+      ) *
+        0.5 +
+        0.5) *
+      thinkingDotRadius *
+      0.3;
+    vec2 dotPos =
+      vec2(-args.mainRadius, args.mainRadius) * 0.8 * thinkingDotEntryAnimation;
+    vec2 dotOffset =
+      vec2(cos(dotAngle + args.time), sin(dotAngle + args.time)) *
+      dotRingRadius;
+    float dotD = length(args.st - dotPos - dotOffset) - thinkingDotRadius * 0.8;
+    d = opSmoothUnion(
+      d,
+      dotD,
+      (1.0 - min(thinkingDotEntryAnimation, args.amount)) * thinkingDotRadius
+    );
+  }
+  sdf.distance = mix(sdf.distance, d, args.amount);
+  
+  // 使用天蓝色背景
+  vec3 thinkColor = bloopColorMain;
+  sdf.color.rgb = mix(sdf.color.rgb, thinkColor, args.amount);
+  sdf.color.a = 1.0;
+  return sdf;
+}
+
+ColoredSDF applySpeakState(
+  ColoredSDF sdf,
+  SDFArgs args,
+  vec4 avgMag,
+  float silenceAmount,
+  float silenceDuration
+) {
+  float d = 1000.0;
+  int barCount = 4;
+  for (int i = 0; i < barCount; i++) {
+    float f = float(float(i) + 0.5) / float(barCount); 
+
+    
+    float w = 1.0 / float(barCount) * 0.44;
+    float h = w;
+
+    
+    float wave = sin(f * pi * 0.8 + args.time) * 0.5 + 0.5;
+    float entryAnimation = spring(
+      scaled(0.1 + wave * 0.4, 1.0 + wave * 0.4, args.duration),
+      0.98
+    );
+    vec2 pos = vec2(f - 0.5, 0.0) * args.mainRadius * 1.9;
+    pos.y = 0.25 * (1.0 - entryAnimation);
+
+    
+    if (silenceAmount > 0.0) {
+      float bounceStagger = f / 5.0;
+      float bounceDelay = 0.6;
+      float bounceTimer = scaled(
+        bounceDelay,
+        bounceDelay + 1.0,
+        fract((silenceDuration + bounceStagger) / 2.0) * 2.0
+      );
+      pos.y +=
+        bounce(bounceTimer, 6.0) *
+        w *
+        0.25 *
+        silenceAmount *
+        pow(entryAnimation, 4.0) *
+        pow(args.amount, 4.0); 
+    }
+
+    
+    h += avgMag[i] * (0.1 + (1.0 - abs(f - 0.5) * 2.0) * 0.1);
+
+    float dd = sdRoundedBox(args.st - pos, vec2(w, h), vec4(w));
+    d = opSmoothUnion(d, dd, 0.2 * (1.0 - args.amount));
+
+  }
+
+  sdf.distance = mix(sdf.distance, d, args.amount);
+  
+  // 使用纯白色云雾配色方案
+  //vec3 speakColor = vec3(1.0, 1.0, 1.0); // 纯白色云雾
+  //sdf.color.rgb = mix(sdf.color.rgb, speakColor, args.amount);
+  //sdf.color.a = 1.0;
+  return sdf;
+}
+
+ColoredSDF applyListenAndSpeakState(
+  ColoredSDF sdf,
+  SDFArgs args,
+  float micLevel,
+  vec4 avgMag,
+  vec4 cumulativeAudio,
+  int binCount,
+  vec3 bloopColorMain,
+  vec3 bloopColorLow,
+  vec3 bloopColorMid,
+  vec3 bloopColorHigh,
+  sampler2D uTextureNoise,
+  bool listening,
+  bool isAdvancedBloop,
+  bool cloudFluctuation
+) {
+  float entryAnimation = fixedSpring(scaled(0.0, 2.0, args.duration), 0.92);
+  
+  float radius =
+    (listening ? 0.37 : 0.43) * (1.0 - (1.0 - entryAnimation) * 0.25) +
+    micLevel * 0.065;
+  
+  float maxDisplacement = 0.01;
+  
+  // 优化震荡周期，与呼吸效果更协调
+  float oscillationPeriod = 6.28; // 2*pi，使周期更自然
+  
+  float displacementOffset =
+    maxDisplacement * sin(args.time);
+  
+  vec2 adjusted_st = args.st - vec2(0.0, displacementOffset);
+
+  if (!isAdvancedBloop) {
+    // 在简单模式下也使用正确的颜色
+    sdf.color = mix(sdf.color, vec4(bloopColorMain, 1.0), args.amount);
+    sdf.distance = mix(sdf.distance, length(adjusted_st) - radius, args.amount);
+    return sdf;
+  }
+  
+  vec4 uAudioAverage = avgMag;
+  vec4 uCumulativeAudio = cumulativeAudio;
+  
+  float scaleFactor = 1.0 / (2.0 * radius);
+  vec2 uv = adjusted_st * scaleFactor + 0.5;
+  uv.y = 1.0 - uv.y;
+  
+  float noiseScale = 1.25; 
+  float windSpeed = 0.075; 
+  float warpPower = 0.19; 
+  float waterColorNoiseScale = 18.0;  // 恢复原始值，更自然的流体感
+  float waterColorNoiseStrength = 0.01; 
+  float textureNoiseScale = 1.0; 
+  float textureNoiseStrength = 0.08; 
+  float verticalOffset = 0.09; 
+  float waveSpread = 1.0; 
+  float layer1Amplitude = 1.0; 
+  float layer1Frequency = 1.0;        // 统一频率，避免冲突
+  float layer2Amplitude = 1.0; 
+  float layer2Frequency = 1.0;        // 统一频率，避免冲突
+  float layer3Amplitude = 1.0; 
+  float layer3Frequency = 1.0;        // 统一频率，避免冲突
+  float fbmStrength = 1.0; 
+  float fbmPowerDamping = 0.55;        // 恢复原始值，更柔和的对比度
+  float overallSoundScale = 1.0; 
+  float blurRadius = 1.0;              // 恢复原始值，更自然的边缘
+  float timescale = 1.0;
+
+  
+  // 统一时间尺度，与其他动画保持同步
+  float time = args.time * timescale;
+
+  vec3 sinOffsets = vec3(
+    uCumulativeAudio.x * 0.15 * overallSoundScale,
+    -uCumulativeAudio.y * 0.5 * overallSoundScale,
+    uCumulativeAudio.z * 1.5 * overallSoundScale
+  );
+  verticalOffset += 1.0 - waveSpread;
+
+  
+  float noiseX = cnoise(
+    vec3(
+      uv * 1.0 + vec2(0.0, 74.8572),
+      (time + uCumulativeAudio.x * 0.05 * overallSoundScale) * 0.3
+    )
+  );
+  float noiseY = cnoise(
+    vec3(
+      uv * 1.0 + vec2(203.91282, 10.0),
+      (time + uCumulativeAudio.z * 0.05 * overallSoundScale) * 0.3
+    )
+  );
+
+  uv += vec2(noiseX * 2.0, noiseY) * warpPower;
+
+  
+  float noiseA =
+    cnoise(vec3(uv * waterColorNoiseScale + vec2(344.91282, 0.0), time * 0.3)) +
+    cnoise(
+      vec3(uv * waterColorNoiseScale * 2.2 + vec2(723.937, 0.0), time * 0.4)
+    ) *
+      0.5;
+  uv += noiseA * waterColorNoiseStrength;
+  uv.y -= verticalOffset;
+
+  
+  vec2 textureUv = uv * textureNoiseScale;
+  float textureSampleR0 = texture(uTextureNoise, textureUv).r;
+  float textureSampleG0 = texture(
+    uTextureNoise,
+    vec2(textureUv.x, 1.0 - textureUv.y)
+  ).g;
+  float textureNoiseDisp0 =
+    mix(
+      textureSampleR0 - 0.5,
+      textureSampleG0 - 0.5,
+      (sin(time + uCumulativeAudio.a * 2.0) + 1.0) * 0.5
+    ) *
+    textureNoiseStrength;
+  textureUv += vec2(63.861 + uCumulativeAudio.x * 0.05, 368.937);
+  float textureSampleR1 = texture(uTextureNoise, textureUv).r;
+  float textureSampleG1 = texture(
+    uTextureNoise,
+    vec2(textureUv.x, 1.0 - textureUv.y)
+  ).g;
+  float textureNoiseDisp1 =
+    mix(
+      textureSampleR1 - 0.5,
+      textureSampleG1 - 0.5,
+      (sin(time + uCumulativeAudio.a * 2.0) + 1.0) * 0.5
+    ) *
+    textureNoiseStrength;
+  textureUv += vec2(272.861, 829.937 + uCumulativeAudio.y * 0.1);
+  textureUv += vec2(180.302 - uCumulativeAudio.z * 0.1, 819.871);
+  float textureSampleR3 = texture(uTextureNoise, textureUv).r;
+  float textureSampleG3 = texture(
+    uTextureNoise,
+    vec2(textureUv.x, 1.0 - textureUv.y)
+  ).g;
+  float textureNoiseDisp3 =
+    mix(
+      textureSampleR3 - 0.5,
+      textureSampleG3 - 0.5,
+      (sin(time + uCumulativeAudio.a * 2.0) + 1.0) * 0.5
+    ) *
+    textureNoiseStrength;
+  uv += textureNoiseDisp0;
+
+  if (cloudFluctuation) {
+      float turbulence = (avgMag.x + avgMag.y + avgMag.z) * 0.33;
+      float displacement = micLevel * turbulence * 0.3;
+      
+      // 使用更协调的时间参数
+      float noiseTime = args.time * 0.8;
+      vec2 flowDirection = vec2(sin(noiseTime * 0.7), cos(noiseTime * 0.7));
+      
+      float warpNoise = cnoise(vec3(uv * 2.5, noiseTime)) * displacement;
+      
+      uv += flowDirection * warpNoise;
+  }
+
+  
+  vec2 st = uv * noiseScale;
+
+  vec2 q = vec2(0.0);
+  q.x = fbm(
+    st * 0.5 +
+      windSpeed * (time + uCumulativeAudio.a * 0.175 * overallSoundScale)
+  );
+  q.y = fbm(
+    st * 0.5 +
+      windSpeed * (time + uCumulativeAudio.x * 0.136 * overallSoundScale)
+  );
+
+  vec2 r = vec2(0.0);
+  r.x = fbm(
+    st +
+      1.0 * q +
+      vec2(0.3, 9.2) +
+      0.15 * (time + uCumulativeAudio.y * 0.234 * overallSoundScale)
+  );
+  r.y = fbm(
+    st +
+      1.0 * q +
+      vec2(8.3, 0.8) +
+      0.126 * (time + uCumulativeAudio.z * 0.165 * overallSoundScale)
+  );
+
+  float f = fbm(st + r - q);
+  float fullFbm = (f + 0.6 * f * f + 0.7 * f + 0.5) * 0.5;
+  fullFbm = pow(fullFbm, fbmPowerDamping);
+  fullFbm *= fbmStrength;
+
+  
+  blurRadius = blurRadius * 1.5;
+  vec2 snUv =
+    (uv + vec2((fullFbm - 0.5) * 1.2) + vec2(0.0, 0.025) + textureNoiseDisp0) *
+    vec2(layer1Frequency, 1.0);
+  float sn =
+    noise(
+      snUv * 2.0 + vec2(sin(sinOffsets.x * 0.25), time * 0.5 + sinOffsets.x)
+    ) *
+    2.0 *
+    layer1Amplitude;
+  float sn2 = smoothstep(
+    sn - 1.2 * blurRadius,
+    sn + 1.2 * blurRadius,
+    (snUv.y - 0.5 * waveSpread) *
+      (5.0 - uAudioAverage.x * 0.1 * overallSoundScale * 0.5) +
+      0.5
+  );
+
+  vec2 snUvBis =
+    (uv + vec2((fullFbm - 0.5) * 0.85) + vec2(0.0, 0.025) + textureNoiseDisp1) *
+    vec2(layer2Frequency, 1.0);
+  float snBis =
+    noise(
+      snUvBis * 4.0 +
+        vec2(
+          sin(sinOffsets.y * 0.15) * 2.4 + 293.0,
+          time * 1.0 + sinOffsets.y * 0.5
+        )
+    ) *
+    2.0 *
+    layer2Amplitude;
+  float sn2Bis = smoothstep(
+    snBis - (0.9 + uAudioAverage.y * 0.4 * overallSoundScale) * blurRadius,
+    snBis + (0.9 + uAudioAverage.y * 0.8 * overallSoundScale) * blurRadius,
+    (snUvBis.y - 0.6 * waveSpread) * (5.0 - uAudioAverage.y * 0.75) + 0.5
+  );
+
+  vec2 snUvThird =
+    (uv + vec2((fullFbm - 0.5) * 1.1) + textureNoiseDisp3) *
+    vec2(layer3Frequency, 1.0);
+  float snThird =
+    noise(
+      snUvThird * 6.0 +
+        vec2(
+          sin(sinOffsets.z * 0.1) * 2.4 + 153.0,
+          time * 1.2 + sinOffsets.z * 0.8
+        )
+    ) *
+    2.0 *
+    layer3Amplitude;
+  float sn2Third = smoothstep(
+    snThird - 0.7 * blurRadius,
+    snThird + 0.7 * blurRadius,
+    (snUvThird.y - 0.9 * waveSpread) * 6.0 + 0.5
+  );
+
+  // 恢复原始的柔和对比度曲线
+  sn2 = pow(sn2, 0.8);
+  sn2Bis = pow(sn2Bis, 0.9);
+
+  // 专业级颜色混合逻辑 - 模拟原始方案
+  vec3 skyColor = bloopColorMain;
+  vec3 cloudColor = bloopColorLow;
+  vec3 cloudDetailColor = bloopColorMid;
+  vec3 cloudHighlightColor = bloopColorHigh;
+
+  // 使用专业LinearBurn混合，类似原始方案
+  vec3 finalColor;
+  finalColor = blendLinearBurn_13_5(skyColor, cloudColor, 1.0 - sn2);
+  finalColor = blendLinearBurn_13_5(
+    finalColor,
+    mix(skyColor, cloudDetailColor, 1.0 - sn2Bis),
+    sn2
+  );
+  
+  // 使用更柔和的高光混合，避免颜色爆炸
+  vec3 highlightBlend = mix(skyColor, cloudHighlightColor, 1.0 - sn2Third);
+  finalColor = mix(finalColor, highlightBlend, sn2 * sn2Bis * 0.6);
+  
+  // 微妙的细节增强，避免过度
+  float detailNoise = noise(uv * 25.0 + time * 2.0);
+  finalColor = blendSoftLight(finalColor, vec3(0.5 + detailNoise * 0.03));
+  
+  sdf.color = mix(sdf.color, vec4(finalColor, 1), args.amount);
+
+  
+  sdf.distance = mix(sdf.distance, length(adjusted_st) - radius, args.amount);
+
+  return sdf;
+}
+
+float micSdf(vec2 st, float muted) {
+  float d = 100.0;
+  float strokeWidth = 0.03;
+  vec2 elementSize = vec2(0.12, 0.26);
+  vec2 elementPos = vec2(0.0, elementSize.y * 0.585);
+  float element = sdRoundedBox(
+    st - elementPos,
+    elementSize,
+    vec4(min(elementSize.x, elementSize.y))
+  );
+  element = element - strokeWidth;
+  d = min(d, element);
+
+  vec2 standSize = elementSize * 2.2;
+  vec2 standPos = vec2(elementPos.x, elementPos.y - 0.05);
+  st.y += 0.08;
+  float ta = -pi / 2.0; 
+  float tb = pi / 2.0; 
+  float w = 0.0;
+  float stand = sdArc(
+    st - standPos,
+    vec2(sin(ta), cos(ta)),
+    vec2(sin(tb), cos(tb)),
+    standSize.x,
+    w
+  );
+  stand = min(
+    stand,
+    sdSegment(st - standPos, vec2(standSize.x, 0.06), vec2(standSize.x, 0.0))
+  );
+  stand = min(
+    stand,
+    sdSegment(st - standPos, vec2(-standSize.x, 0.06), vec2(-standSize.x, 0.0))
+  );
+
+  float foot = sdSegment(
+    st - standPos,
+    vec2(0.0, -standSize.x),
+    vec2(0.0, -standSize.x * 1.66)
+  );
+  foot = min(
+    foot,
+    sdSegment(
+      st - standPos,
+      vec2(-standSize.x * 0.68, -standSize.x * 1.66),
+      vec2(standSize.x * 0.68, -standSize.x * 1.66)
+    )
+  );
+  stand = min(stand, foot);
+
+  d = min(d, abs(stand) - strokeWidth);
+
+  return d;
+}
+
+ColoredSDF applyBottomAlignedBarsAndMicState(
+  ColoredSDF sdf,
+  SDFArgs args,
+  vec4 avgMag,
+  float micLevel,
+  bool isDarkMode
+) {
+  float d = 1000.0;
+  int barCount = 5;
+  int loopCount = barCount;
+  if (args.amount == 0.0) {
+    loopCount = 1; 
+  }
+  for (int i = 0; i < loopCount; i++) {
+    float f = float(float(i) + 0.5) / float(barCount); 
+
+    
+    float w = 1.0 / float(barCount) * 0.42;
+    float h = w;
+
+    
+    float entryDuration = 1.8;
+    float entryAnimation =
+      fixedSpring(scaled(0.0, entryDuration, args.duration), 0.94) *
+      args.amount;
+    vec2 pos = vec2(f - 0.5, 0.0) * args.mainRadius * 1.9;
+    pos.x *= entryAnimation;
+
+    if (i == 0) {
+      float micScale = mix(6.0 - micLevel * 2.0, 6.0, args.amount);
+      float yOffset = w * 2.0;
+      d =
+        micSdf(
+          (args.st - pos + vec2(-w * 0.15 * args.amount, yOffset)) * micScale,
+          1.0 - args.amount
+        ) /
+        micScale;
+    } else {
+      
+      h += avgMag[i - 1] * (0.1 + (1.0 - abs(f - 0.5) * 2.0) * 0.1) * 0.7;
+      h = mix(w, h, smoothstep(0.8, 1.0, entryAnimation));
+
+      float bubbleInDur = 0.5;
+      float bubbleOutDur = 0.4;
+
+      
+      float bubbleEffect =
+        fixedSpring(
+          scaled(
+            f / 4.0,
+            f / 4.0 + bubbleInDur,
+            args.duration - entryDuration / 8.0
+          ),
+          1.0
+        ) *
+        pow(
+          1.0 -
+            scaled(
+              f / 8.0 + bubbleInDur / 8.0,
+              f / 4.0 + bubbleInDur / 8.0 + bubbleOutDur,
+              args.duration - entryDuration / 8.0
+            ),
+          2.0
+        );
+
+      h += bubbleEffect * min(h, w);
+
+      
+      w *= args.amount;
+      h *= args.amount;
+
+      h = min(h, 0.23); 
+
+      pos.y -= 0.25;
+      pos.y += h;
+      pos.y += bubbleEffect * w * 0.5;
+
+      float dd = sdRoundedBox(args.st - pos, vec2(w, h), vec4(w));
+      d = min(d, dd);
+    }
+  }
+
+  sdf.distance = d; 
+  // 使用纯白色云雾配色方案
+  vec3 micBarColor = isDarkMode ? vec3(1.0, 1.0, 1.0) : vec3(0.95, 0.95, 0.95);
+  sdf.color = mix(
+    sdf.color,
+    vec4(micBarColor, 1.0),
+    args.amount
+  );
+  return sdf;
+}
+
+ColoredSDF applyHaltState(ColoredSDF sdf, SDFArgs args, vec3 bloopColorMain) {
+  
+  float radius = mix(
+    0.4,
+    mix(0.4, 0.45, args.amount),
+    sin(args.time * 0.25) * 0.5 + 0.5
+  );
+  float strokeWidth = mix(radius / 2.0, 0.02, args.amount);
+
+  
+  radius -= strokeWidth;
+
+  radius *= mix(0.7, 1.0, args.amount);
+  float circle = abs(length(args.st) - radius) - strokeWidth;
+
+  sdf.distance = mix(sdf.distance, circle, args.amount);
+  
+  // 使用天蓝色背景
+  vec3 haltColor = bloopColorMain;
+  sdf.color.rgb = mix(sdf.color.rgb, haltColor, args.amount);
+  sdf.color.a = mix(sdf.color.a, pow(0.8, 2.2), scaled(0.5, 1.0, args.amount));
+  return sdf;
+}
+
+vec3 blendNormal(vec3 base, vec3 blend) {
+  return blend;
+}
+
+vec3 blendNormal(vec3 base, vec3 blend, float opacity) {
+  return blendNormal(base, blend) * opacity + base * (1.0 - opacity);
+}
+
+in vec2 out_uv;
+out vec4 fragColor;
+
+layout(std140) uniform BlorbUniformsObject {
+  float time;
+  float micLevel;
+  float touchDownTimestamp;
+  float touchUpTimestamp;
+  float stateListen;
+  float listenTimestamp;
+  float stateThink;
+  float thinkTimestamp;
+  float stateSpeak;
+  float speakTimestamp;
+  float readyTimestamp;
+  float stateHalt;
+  float haltTimestamp;
+  float stateFailedToConnect;
+  float failedToConnectTimestamp;
+  vec4 avgMag;
+  vec4 cumulativeAudio;
+  vec2 viewport;
+  float screenScaleFactor;
+  float silenceAmount;
+  float silenceTimestamp;
+  bool isDarkMode;
+  bool fadeBloopWhileListening;
+  bool isNewBloop;
+  bool isAdvancedBloop;
+  bool breathingEffect;
+  bool cloudFluctuation;
+  vec3 bloopColorMain;
+  vec3 bloopColorLow;
+  vec3 bloopColorMid;
+  vec3 bloopColorHigh;
+} ubo; 
+
+uniform sampler2D uTextureNoise; 
+
+void main() {
+  vec2 st = out_uv - 0.5;
+  float viewRatio = ubo.viewport.y / ubo.viewport.x;
+  st.y *= viewRatio;
+
+  if (ubo.breathingEffect) {
+    // 使用与listen状态相同的呼吸频率，避免冲突
+    float breathingFactor = 1.0 + ubo.micLevel * (sin(ubo.time) * 0.5 + 0.5) * 0.025;
+    st /= breathingFactor;
+  }
+
+  ColoredSDF sdf;
+  sdf.distance = 1000.0;
+  // 初始化为透明，让后续状态的颜色能够正确显示
+  sdf.color = vec4(0.0, 0.0, 0.0, 0.0);
+
+  SDFArgs args;
+  args.st = st;
+  args.time = ubo.time;
+  args.mainRadius = 0.49;
+
+  SDFArgs idleArgs = args;
+  SDFArgs listenArgs = args;
+  SDFArgs thinkArgs = args;
+  SDFArgs speakArgs = args;
+  SDFArgs haltArgs = args;
+  SDFArgs failedToConnectArgs = args;
+
+  // 计算idle状态的权重：只有当没有其他活跃状态时才显示idle
+  float otherStatesTotal = ubo.stateListen + ubo.stateThink + ubo.stateSpeak + ubo.stateHalt + ubo.stateFailedToConnect;
+  idleArgs.amount = max(0.0, 1.0 - otherStatesTotal);
+  
+  listenArgs.amount = ubo.stateListen;
+  thinkArgs.amount = ubo.stateThink;
+  speakArgs.amount = ubo.stateSpeak;
+  haltArgs.amount = ubo.stateHalt;
+  failedToConnectArgs.amount = ubo.stateFailedToConnect;
+
+  idleArgs.duration = ubo.time - ubo.readyTimestamp;
+  listenArgs.duration = ubo.time - ubo.listenTimestamp;
+  thinkArgs.duration = ubo.time - ubo.thinkTimestamp;
+  speakArgs.duration = ubo.time - ubo.speakTimestamp;
+  haltArgs.duration = ubo.time - ubo.haltTimestamp;
+  failedToConnectArgs.duration = ubo.time - ubo.failedToConnectTimestamp;
+
+  if (idleArgs.amount > 0.0) {
+    if (ubo.isNewBloop) {
+      sdf = applyIdleState(sdf, idleArgs, ubo.isDarkMode, ubo.bloopColorMain);
+    } else {
+      sdf = applyIdleStateLegacy(sdf, idleArgs, ubo.isDarkMode, ubo.bloopColorMain);
+    }
+  }
+
+  if (failedToConnectArgs.amount > 0.0) {
+    sdf = applyHaltState(sdf, failedToConnectArgs, ubo.bloopColorMain);
+  }
+
+  if (listenArgs.amount > 0.0) {
+    if (ubo.isAdvancedBloop) {
+      if (speakArgs.amount > 0.0) {
+        listenArgs.amount = 1.0;
+      }
+
+      
+      int binCount = 1;
+      sdf = applyListenAndSpeakState(
+        sdf,
+        listenArgs,
+        ubo.micLevel,
+        ubo.avgMag,
+        ubo.cumulativeAudio,
+        binCount,
+        ubo.bloopColorMain,
+        ubo.bloopColorLow,
+        ubo.bloopColorMid,
+        ubo.bloopColorHigh,
+        uTextureNoise,
+        true,
+        ubo.isAdvancedBloop,
+        ubo.cloudFluctuation
+      );
+    } else {
+      sdf = applyListenState(
+        sdf,
+        listenArgs,
+        ubo.micLevel,
+        ubo.listenTimestamp,
+        ubo.touchDownTimestamp,
+        ubo.touchUpTimestamp,
+        ubo.fadeBloopWhileListening
+      );
+    }
+  }
+
+  if (thinkArgs.amount > 0.0) {
+    sdf = applyThinkState(sdf, thinkArgs, ubo.bloopColorMain);
+  }
+
+  if (speakArgs.amount > 0.0) {
+    if (ubo.isAdvancedBloop) {
+      int binCount = 1;
+      sdf = applyListenAndSpeakState(
+        sdf,
+        speakArgs,
+        ubo.micLevel,
+        ubo.avgMag,
+        ubo.cumulativeAudio,
+        binCount,
+        ubo.bloopColorMain,
+        ubo.bloopColorLow,
+        ubo.bloopColorMid,
+        ubo.bloopColorHigh,
+        uTextureNoise,
+        false,
+        ubo.isAdvancedBloop,
+        ubo.cloudFluctuation
+      );
+    } else {
+      float silenceDuration = ubo.time - ubo.silenceTimestamp;
+      sdf = applySpeakState(
+        sdf,
+        speakArgs,
+        ubo.avgMag,
+        ubo.silenceAmount,
+        silenceDuration
+      );
+    }
+  }
+
+  if (haltArgs.amount > 0.0) {
+    sdf = applyHaltState(sdf, haltArgs, ubo.bloopColorMain);
+  }
+
+  float clampingTolerance = 0.0075 / ubo.screenScaleFactor;
+  float clampedShape = smoothstep(clampingTolerance, 0.0, sdf.distance);
+  float alpha = sdf.color.a * clampedShape;
+  if (!ubo.isNewBloop) {
+    alpha *= scaled(0.0, 1.0, ubo.time);
+  }
+  fragColor = vec4(sdf.color.rgb * alpha, alpha);
+}`;
+
+// 顶点着色器
+const vertexShaderSource = `#version 300 es
+
+out vec4 out_position;
+out vec2 out_uv;
+
+const vec4 blitFullscreenTrianglePositions[6] = vec4[](
+  vec4(-1.0, -1.0, 0.0, 1.0),
+  vec4(3.0, -1.0, 0.0, 1.0),
+  vec4(-1.0, 3.0, 0.0, 1.0),
+  vec4(-1.0, -1.0, 0.0, 1.0),
+  vec4(3.0, -1.0, 0.0, 1.0),
+  vec4(-1.0, 3.0, 0.0, 1.0)
+);
+
+void main() {
+  out_position = blitFullscreenTrianglePositions[gl_VertexID];
+  out_uv = out_position.xy * 0.5 + 0.5;
+  out_uv.y = 1.0 - out_uv.y;
+  gl_Position = out_position;
+}`;
+
+        // WebGL 初始化
+        function initWebGL() {
+            const canvas = document.getElementById('glCanvas');
+            const gl = canvas.getContext('webgl2');
+            
+            if (!gl) {
+                alert('无法初始化WebGL2');
+                return null;
+            }
+            
+            // 设置画布尺寸
+            function resizeCanvas() {
+                const baseSize = Math.min(300, Math.min(window.innerWidth, window.innerHeight) - 40);
+                const dpr = window.devicePixelRatio || 1;
+                const supersampleFactor = 1.5; // 降低超采样，避免过度锐化
+                const size = baseSize * dpr * supersampleFactor;
+
+                if (canvas.width !== size || canvas.height !== size) {
+                    canvas.width = size;
+                    canvas.height = size;
+                    canvas.style.width = baseSize + 'px';
+                    canvas.style.height = baseSize + 'px';
+                    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+                }
+            }
+            
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            return gl;
+        }
+
+        // 创建着色器程序
+        function createShaderProgram(gl, vertexSource, fragmentSource) {
+            const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSource);
+            const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
+            
+            const program = gl.createProgram();
+            gl.attachShader(program, vertexShader);
+            gl.attachShader(program, fragmentShader);
+            gl.linkProgram(program);
+            
+            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                console.error('着色器程序链接失败:', gl.getProgramInfoLog(program));
+                return null;
+            }
+            
+            return program;
+        }
+
+        // 创建着色器
+        function createShader(gl, type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error('着色器编译失败:', gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            
+            return shader;
+        }
+
+        // 从图片加载噪声纹理
+        function loadNoiseTexture(gl, url) {
+            const texture = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+
+            // 先填充一个像素，这样在图片加载完成前也能使用
+            const level = 0;
+            const internalFormat = gl.RGBA;
+            const width = 1;
+            const height = 1;
+            const border = 0;
+            const srcFormat = gl.RGBA;
+            const srcType = gl.UNSIGNED_BYTE;
+            const pixel = new Uint8Array([0, 0, 0, 255]);  // 不透明黑色
+            gl.texImage2D(gl.TEXTURE_2D, level, internalFormat,
+                          width, height, border, srcFormat, srcType,
+                          pixel);
+
+            const image = new Image();
+            image.crossOrigin = 'anonymous'; // 设置跨域属性以避免CORS错误
+            image.onload = function() {
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, srcFormat, srcType, image);
+
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+            };
+            image.onerror = () => console.error(`Failed to load texture: ${url}`);
+            image.src = url;
+
+            return texture;
+        }
+
+        // 创建UBO
+        function createUniformBuffer(gl, program) {
+            const blockIndex = gl.getUniformBlockIndex(program, 'BlorbUniformsObject');
+            const blockSize = gl.getActiveUniformBlockParameter(program, blockIndex, gl.UNIFORM_BLOCK_DATA_SIZE);
+            
+            const buffer = gl.createBuffer();
+            gl.bindBuffer(gl.UNIFORM_BUFFER, buffer);
+            gl.bufferData(gl.UNIFORM_BUFFER, blockSize, gl.DYNAMIC_DRAW);
+            
+            const bindingPoint = 0;
+            gl.bindBufferBase(gl.UNIFORM_BUFFER, bindingPoint, buffer);
+            gl.uniformBlockBinding(program, blockIndex, bindingPoint);
+            
+            return { buffer, blockSize };
+        }
+
+        // 新增：初始化麦克风
+        async function initMicrophone() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const source = audioContext.createMediaStreamSource(stream);
+                const analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                analyser.smoothingTimeConstant = 0.8;
+                source.connect(analyser);
+
+                const dataArray = new Uint8Array(analyser.frequencyBinCount);
+                const timeDomainArray = new Uint8Array(analyser.fftSize);
+
+                const micLevelSlider = document.getElementById('micLevel');
+                const micValueDisplay = document.getElementById('micValue');
+                const audioLowSlider = document.getElementById('audioLow');
+                const audioMidSlider = document.getElementById('audioMid');
+                const audioHighSlider = document.getElementById('audioHigh');
+                const audioFullSlider = document.getElementById('audioFull');
+                
+                // 禁用滑块的手动输入
+                micLevelSlider.disabled = true;
+                audioLowSlider.disabled = true;
+                audioMidSlider.disabled = true;
+                audioHighSlider.disabled = true;
+                audioFullSlider.disabled = true;
+
+
+                function getMicLevel() {
+                    analyser.getByteTimeDomainData(timeDomainArray);
+                    let sumSquares = 0.0;
+                    for (const amplitude of timeDomainArray) {
+                        const val = (amplitude / 128.0) - 1.0;
+                        sumSquares += val * val;
+                    }
+                    const rms = Math.sqrt(sumSquares / timeDomainArray.length);
+                    const newMicLevel = Math.min(rms * 5.0, 1.0); // 放大并裁剪
+                    state.audio.micLevel = state.audio.micLevel * 0.95 + newMicLevel * 0.05; // 平滑处理
+
+                    micLevelSlider.value = state.audio.micLevel;
+                    micValueDisplay.textContent = state.audio.micLevel.toFixed(2);
+                    
+                    analyser.getByteFrequencyData(dataArray);
+                    const freqBinCount = analyser.frequencyBinCount;
+                    
+                    const lowEnd = Math.floor(freqBinCount * 0.1);
+                    const midEnd = Math.floor(freqBinCount * 0.4);
+                    const highEnd = Math.floor(freqBinCount * 0.9);
+
+                    let lowSum = 0, midSum = 0, highSum = 0, fullSum = 0;
+
+                    for (let i = 0; i < lowEnd; i++) { lowSum += dataArray[i]; }
+                    for (let i = lowEnd; i < midEnd; i++) { midSum += dataArray[i]; }
+                    for (let i = midEnd; i < highEnd; i++) { highSum += dataArray[i]; }
+                    for (let i = 0; i < freqBinCount; i++) { fullSum += dataArray[i]; }
+
+                    state.audio.avgMag[0] = (lowSum / lowEnd / 255) * 2.0;
+                    state.audio.avgMag[1] = (midSum / (midEnd - lowEnd) / 255) * 1.5;
+                    state.audio.avgMag[2] = (highSum / (highEnd - midEnd) / 255) * 1.2;
+                    state.audio.avgMag[3] = (fullSum / freqBinCount / 255) * 1.0;
+                    
+                    for(let i=0; i<4; i++) {
+                        state.audio.avgMag[i] = Math.min(state.audio.avgMag[i], 1.0);
+                    }
+
+                    audioLowSlider.value = state.audio.avgMag[0];
+                    audioMidSlider.value = state.audio.avgMag[1];
+                    audioHighSlider.value = state.audio.avgMag[2];
+                    audioFullSlider.value = state.audio.avgMag[3];
+
+                    requestAnimationFrame(getMicLevel);
+                }
+
+                getMicLevel();
+
+            } catch (err) {
+                console.error('获取麦克风失败:', err);
+                alert('无法访问麦克风。请检查您的浏览器权限设置。效果将使用滑块控制。');
+            }
+        }
+
+        // 状态管理
+        const state = {
+            currentState: 'idle',
+            targetState: null,
+            transitioning: false,
+            transitionStartTime: 0,
+            transitionProgress: 0,
+            timestamps: {
+                ready: 0,
+                listen: 0,
+                think: 0,
+                speak: 0,
+                halt: 0,
+                failedToConnect: 0,
+                touchDown: -1000,
+                touchUp: -1000,
+                silence: 0
+            },
+            stateValues: {
+                listen: 0,
+                think: 0,
+                speak: 0,
+                halt: 0,
+                failedToConnect: 0
+            },
+            audio: {
+                micLevel: 0,
+                avgMag: [0, 0, 0, 0],
+                cumulativeAudio: [0, 0, 0, 0]
+            },
+            settings: {
+                isDarkMode: true,
+                fadeBloopWhileListening: false,
+                isNewBloop: true,
+                isAdvancedBloop: true,
+                breathingEffect: true,
+                cloudFluctuation: true
+            },
+            colors: {
+                main: [0.863, 0.969, 1.0],   // bloopColorMain: H("#DCF7FF")
+                low: [0.004, 0.506, 0.996], // bloopColorLow: H("#0181FE")
+                mid: [0.643, 0.937, 1.0],   // bloopColorMid: H("#A4EFFF")
+                high: [1.0, 0.992, 0.937] , // bloopColorHigh: H("#FFFDEF") 
+            }
+        };
+
+        // 平滑状态过渡系统
+        function updateStateTransition(currentTime, deltaTime) {
+            if (state.transitioning) {
+                const TRANSITION_DURATION = 0.6; // 600ms平滑过渡
+                state.transitionProgress += deltaTime / TRANSITION_DURATION;
+                const progress = Math.min(state.transitionProgress, 1.0);
+                
+                // 使用cubic-bezier缓动函数 (ease-out-cubic)
+                const eased = 1 - Math.pow(1 - progress, 3);
+                
+                // 平滑插值所有状态
+                Object.keys(state.stateValues).forEach(key => {
+                    const target = (key === state.targetState) ? 1.0 : 0.0;
+                    const current = state.stateValues[key];
+                    state.stateValues[key] = current + (target - current) * eased;
+                });
+                
+                // 过渡完成
+                if (progress >= 1.0) {
+                    state.currentState = state.targetState;
+                    state.transitioning = false;
+                    state.targetState = null;
+                    
+                    // 确保最终值精确
+                    Object.keys(state.stateValues).forEach(key => {
+                        state.stateValues[key] = (key === state.currentState && state.currentState !== 'idle') ? 1.0 : 0.0;
+                    });
+                }
+            }
+        }
+
+        // 切换状态 (改进版)
+        function switchState(newState) {
+            if (state.currentState === newState) return; // 避免重复切换
+            
+            const currentTime = performance.now() / 1000;
+            
+            // 开始平滑过渡
+            state.targetState = newState;
+            state.transitioning = true;
+            state.transitionStartTime = currentTime;
+            state.transitionProgress = 0;
+            
+            // 设置时间戳
+            if (newState !== 'idle' && state.timestamps[newState] !== undefined) {
+                state.timestamps[newState] = currentTime;
+            }
+            
+            // 更新UI
+            document.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(newState + 'Btn').classList.add('active');
+            document.getElementById('currentState').textContent = newState.charAt(0).toUpperCase() + newState.slice(1);
+        }
+
+        // 主函数
+        function main() {
+            const gl = initWebGL();
+            if (!gl) return;
+            
+            initMicrophone();
+
+            // 创建着色器程序
+            const program = createShaderProgram(gl, vertexShaderSource, fragmentShaderSource);
+            if (!program) return;
+            
+            // 从图片加载噪声纹理
+            const noiseTexture = loadNoiseTexture(gl, './noise-watercolor.webp');
+            
+            // 创建UBO
+            const ubo = createUniformBuffer(gl, program);
+            
+            // 获取uniform位置
+            const noiseTextureLocation = gl.getUniformLocation(program, 'uTextureNoise');
+            
+            // 设置事件监听
+            document.getElementById('idleBtn').addEventListener('click', () => switchState('idle'));
+            document.getElementById('listenBtn').addEventListener('click', () => switchState('listen'));
+            document.getElementById('thinkBtn').addEventListener('click', () => switchState('think'));
+            document.getElementById('speakBtn').addEventListener('click', () => switchState('speak'));
+            document.getElementById('haltBtn').addEventListener('click', () => switchState('halt'));
+            
+            document.getElementById('micLevel').addEventListener('input', (e) => {
+                state.audio.micLevel = parseFloat(e.target.value);
+                document.getElementById('micValue').textContent = state.audio.micLevel.toFixed(2);
+            });
+            
+            document.getElementById('audioLow').addEventListener('input', (e) => {
+                state.audio.avgMag[0] = parseFloat(e.target.value);
+            });
+            document.getElementById('audioMid').addEventListener('input', (e) => {
+                state.audio.avgMag[1] = parseFloat(e.target.value);
+            });
+            document.getElementById('audioHigh').addEventListener('input', (e) => {
+                state.audio.avgMag[2] = parseFloat(e.target.value);
+            });
+            document.getElementById('audioFull').addEventListener('input', (e) => {
+                state.audio.avgMag[3] = parseFloat(e.target.value);
+            });
+            
+            document.getElementById('darkMode').addEventListener('change', (e) => {
+                state.settings.isDarkMode = e.target.checked;
+            });
+            document.getElementById('newBloop').addEventListener('change', (e) => {
+                state.settings.isNewBloop = e.target.checked;
+            });
+            document.getElementById('advancedBloop').addEventListener('change', (e) => {
+                state.settings.isAdvancedBloop = e.target.checked;
+            });
+            document.getElementById('fadeBloop').addEventListener('change', (e) => {
+                state.settings.fadeBloopWhileListening = e.target.checked;
+            });
+            document.getElementById('breathingEffect').addEventListener('change', (e) => {
+                state.settings.breathingEffect = e.target.checked;
+            });
+            document.getElementById('cloudFluctuation').addEventListener('change', (e) => {
+                state.settings.cloudFluctuation = e.target.checked;
+            });
+            
+            // 初始化音频值
+            state.audio.avgMag = [0.2, 0.3, 0.4, 0.5];
+            
+            // 渲染循环
+            let lastTime = 0;
+            function render(time) {
+                time *= 0.001; // 转换为秒
+                const deltaTime = time - lastTime;
+                lastTime = time;
+                
+                // 更新状态过渡
+                updateStateTransition(time, deltaTime);
+                
+                // 更新运行时间显示
+                document.getElementById('runTime').textContent = time.toFixed(2);
+                
+                // 更新累积音频数据（模拟）- 优化平滑度
+                for (let i = 0; i < 4; i++) {
+                    // 使用更平滑的累积算法
+                    const accumulation = state.audio.avgMag[i] * deltaTime * 0.8;
+                    state.audio.cumulativeAudio[i] += accumulation;
+                    
+                    // 防止累积值过大，添加自然衰减
+                    state.audio.cumulativeAudio[i] *= 0.9995;
+                }
+                
+                // 准备uniform数据
+                const uniformData = new ArrayBuffer(ubo.blockSize);
+                const view = new DataView(uniformData);
+                
+                let offset = 0;
+                
+                // 严格按照std140内存布局规则重新写入所有UBO数据
+
+                // 15个 float (0-59 bytes)
+                view.setFloat32(offset, time, true); offset += 4;
+                view.setFloat32(offset, state.audio.micLevel, true); offset += 4;
+                view.setFloat32(offset, state.timestamps.touchDown, true); offset += 4;
+                view.setFloat32(offset, state.timestamps.touchUp, true); offset += 4;
+                view.setFloat32(offset, state.stateValues.listen, true); offset += 4;
+                view.setFloat32(offset, state.timestamps.listen, true); offset += 4;
+                view.setFloat32(offset, state.stateValues.think, true); offset += 4;
+                view.setFloat32(offset, state.timestamps.think, true); offset += 4;
+                view.setFloat32(offset, state.stateValues.speak, true); offset += 4;
+                view.setFloat32(offset, state.timestamps.speak, true); offset += 4;
+                view.setFloat32(offset, state.timestamps.ready, true); offset += 4;
+                view.setFloat32(offset, state.stateValues.halt, true); offset += 4;
+                view.setFloat32(offset, state.timestamps.halt, true); offset += 4;
+                view.setFloat32(offset, state.stateValues.failedToConnect, true); offset += 4;
+                view.setFloat32(offset, state.timestamps.failedToConnect, true); offset += 4;
+
+                // 填充到16字节对齐 (vec4)
+                offset = 64; 
+                
+                // avgMag (vec4), (64-79 bytes)
+                for (let i = 0; i < 4; i++) { view.setFloat32(offset + i * 4, state.audio.avgMag[i], true); }
+                offset += 16;
+                
+                // cumulativeAudio (vec4), (80-95 bytes)
+                for (let i = 0; i < 4; i++) { view.setFloat32(offset + i * 4, state.audio.cumulativeAudio[i], true); }
+                offset += 16;
+                
+                // viewport (vec2), (96-103 bytes)
+                view.setFloat32(offset, gl.canvas.width, true);
+                view.setFloat32(offset + 4, gl.canvas.height, true);
+                offset += 8;
+
+                // 3个 float (104-115 bytes)
+                const dpr = window.devicePixelRatio || 1;
+                const supersampleFactor = 2;
+                view.setFloat32(offset, dpr * supersampleFactor, true); offset += 4; // screenScaleFactor
+                view.setFloat32(offset, 0.0, true); offset += 4; // silenceAmount
+                view.setFloat32(offset, state.timestamps.silence, true); offset += 4; // silenceTimestamp
+
+                // 6个 bool (作为 uint)
+                // bools 必须 4 字节对齐, 当前 offset 是 116，符合要求
+                view.setUint32(offset, state.settings.isDarkMode ? 1 : 0, true); offset += 4;
+                view.setUint32(offset, state.settings.fadeBloopWhileListening ? 1 : 0, true); offset += 4;
+                view.setUint32(offset, state.settings.isNewBloop ? 1 : 0, true); offset += 4;
+                view.setUint32(offset, state.settings.isAdvancedBloop ? 1 : 0, true); offset += 4;
+                view.setUint32(offset, state.settings.breathingEffect ? 1 : 0, true); offset += 4;
+                view.setUint32(offset, state.settings.cloudFluctuation ? 1 : 0, true); offset += 4;
+                
+                // 填充到16字节对齐 (vec3 -> vec4)
+                offset = 144;
+                
+                // bloopColorMain (vec3), (144-159 bytes)
+                for (let i = 0; i < 3; i++) { view.setFloat32(offset + i * 4, state.colors.main[i], true); }
+                offset += 16;
+                
+                // bloopColorLow (vec3), (160-175 bytes)
+                for (let i = 0; i < 3; i++) { view.setFloat32(offset + i * 4, state.colors.low[i], true); }
+                offset += 16;
+
+                // bloopColorMid (vec3), (176-191 bytes)
+                for (let i = 0; i < 3; i++) { view.setFloat32(offset + i * 4, state.colors.mid[i], true); }
+                offset += 16;
+                
+                // bloopColorHigh (vec3), (192-207 bytes)
+                for (let i = 0; i < 3; i++) { view.setFloat32(offset + i * 4, state.colors.high[i], true); }
+                
+                // 更新UBO
+                gl.bindBuffer(gl.UNIFORM_BUFFER, ubo.buffer);
+                gl.bufferSubData(gl.UNIFORM_BUFFER, 0, uniformData);
+                
+                // 使用程序
+                gl.useProgram(program);
+                
+                // 绑定纹理
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, noiseTexture);
+                gl.uniform1i(noiseTextureLocation, 0);
+                
+                // 清除画布
+                gl.clearColor(0, 0, 0, 0);
+                gl.clear(gl.COLOR_BUFFER_BIT);
+                
+                // 启用混合
+                gl.enable(gl.BLEND);
+                gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+                
+                // 绘制
+                gl.drawArrays(gl.TRIANGLES, 0, 6);
+                
+                requestAnimationFrame(render);
+            }
+            
+            // 启动渲染循环
+            requestAnimationFrame(render);
+        }
+        
+        // 启动应用
+        main();
+        
+        // 初始化完成后，保持idle状态，让用户自然体验状态过渡
+        setTimeout(() => {
+            // 可以切换到其他状态来测试过渡效果
+            // switchState('listen');
+        }, 100);
+    </script>
+</body>
+</html>
