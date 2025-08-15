@@ -20,9 +20,9 @@
 
 ### 📹 效果演示视频
 
-![演示视频](demo.mov)
+[![视频演示](tech_graph.png)](https://github.com/acupofespresso/CloudWave/raw/main/demo.mov)
 
-> 📺 观看完整的实时音频可视化效果演示，展示云雾动画、音频响应和多种状态切换的动态效果。
+> 📺 **点击上方图片观看完整演示** - 展示云雾动画、音频响应和多种状态切换的动态效果。
 
 ### 基础云雾效果 (`webgl.html`)
 - 🌤️ 蓝天云雾动画，圆形视窗展示
